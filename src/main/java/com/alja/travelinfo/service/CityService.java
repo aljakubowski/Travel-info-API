@@ -5,6 +5,7 @@ import com.alja.travelinfo.exceptionHandlers.SameCityException;
 import com.alja.travelinfo.receivedPOJO.City;
 import com.alja.travelinfo.model.TwoCitiesInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -13,7 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
-// class that handles nominatim.openstreetmap Service
+@Slf4j
 @Service
 public class CityService {
 
@@ -24,24 +25,14 @@ public class CityService {
         this.twoCitiesInfo = twoCitiesInfo;
     }
 
-    public String getCityDetails(String cityName) {
-        String outputResult;
-        City city = createRequest(cityName);
-
-        outputResult = city.getDisplay_name() + "\nlatitude: " + city.getLat() + "\nlongitude: " + city.getLon();
-        return outputResult;
+    public City getCity(String cityName) {
+        return createRequest(cityName);
     }
 
-    public String getCityFullName(String cityName) {
-        City city = createRequest(cityName);
-        return city.getDisplay_name();
+    public String getCityCoords(City city) {
+        String[] coords = {city.getLat(), city.getLon()};
+        return convertCoordToString(coords);
     }
-
-    public String getCityCoords(String cityName) {
-        City city = createRequest(cityName);
-        return "\nlatitude: " + city.getLat() + "\nlongitude: " + city.getLon();
-    }
-
 
     public TwoCitiesInfo getTravelInfo(String cityName1, String cityName2) {
 
@@ -54,7 +45,7 @@ public class CityService {
 
         String[] coordCity1 = {city1.getLat(), city1.getLon()};
         String[] coordCity2 = {city2.getLat(), city2.getLon()};
-        double distance = distanceBetween(coordCity1, coordCity2);
+        double distance = countDistanceBetween(coordCity1, coordCity2);
 
         twoCitiesInfo.setStartCity(city1.getDisplay_name());
         twoCitiesInfo.setDestinationCity(city2.getDisplay_name());
@@ -68,7 +59,9 @@ public class CityService {
         return twoCitiesInfo;
     }
 
-    private double distanceBetween(String[] coord1, String[] coord2) {
+    // == method that returns distance between cities in km,
+    //    calculated with formula based on geographic coordinates ==
+    private double countDistanceBetween(String[] coord1, String[] coord2) {
 
         double lat1 = Double.parseDouble(coord1[0]);
         double lon1 = Double.parseDouble(coord1[1]);
@@ -83,18 +76,22 @@ public class CityService {
         return distance;
     }
 
+    // == method that returns average flight time which is calculated
+    //    with arbitrarily assumed plane speed and boarding time ==
     private String averageFlightTime(double distance) {
 
         double averagePlaneSpeed = 900.0d;
-        int starAndLandTime = 1;
-        double time = distance / averagePlaneSpeed;
+        int airportTimeHours = 1;
+        double flightTime = distance / averagePlaneSpeed;
 
-        int hours = (int) time;
-        int minutes = (int) Math.round(time % 1 * 60);
+        int hours = (int) flightTime;
+        int minutes = (int) Math.round(flightTime % 1 * 60);
 
-        return hours + starAndLandTime + "h and " + minutes + "min";
+        return hours + airportTimeHours + "h and " + minutes + "min";
     }
 
+    // == method that converts a raw array of coordinates to
+    //    String of clean coordinates ==
     private String convertCoordToString(String[] coords) {
 
         double lat = Double.parseDouble(coords[0]);
@@ -106,33 +103,24 @@ public class CityService {
         return "lat: " + lat + ", lon: " + lon;
     }
 
-    public String getTwoCitiesDetails(String cityName1, String cityName2) {
-
-        String outputResult = "";
-        City city1 = createRequest(cityName1);
-        City city2 = createRequest(cityName2);
-
-        String[] coordCity1 = {city1.getLat(), city1.getLon()};
-        String[] coordCity2 = {city2.getLat(), city2.getLon()};
-        double distance = distanceBetween(coordCity1, coordCity2);
-
-        return outputResult + "Distance between:\n" + city1.getDisplay_name() + "\nand\n" + city2.getDisplay_name() +
-                "\nis: " + distance + " km";
-    }
-
+    // == method that builds HTTP request to 'nominatim.openstreetmap.org' API
+    //    and maps response to City POJO ==
     private City createRequest(String cityName) {
 
         String apiAddress = "https://nominatim.openstreetmap.org/?city=";
         String format = "&format=json&limit=1";
         HttpClient client = HttpClient.newHttpClient();
 
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create((apiAddress + cityName + format).replace(" ", "%20"))).build();
-
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create((apiAddress + cityName + format)
+                .replace(" ", "%20"))).build();
         String response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(HttpResponse::body)
                 .join();
 
         response = response.substring(0, response.length() - 1).substring(1);
+
+        log.info("CityService => request: " + request);
+        log.info("CityService <<== response: " + response);
 
         City city;
         try {

@@ -3,85 +3,62 @@ package com.alja.travelinfo.controller;
 import com.alja.travelinfo.exceptionHandlers.CityErrorResponse;
 import com.alja.travelinfo.exceptionHandlers.CityNotFoundException;
 import com.alja.travelinfo.exceptionHandlers.SameCityException;
+import com.alja.travelinfo.model.CityInformation;
 import com.alja.travelinfo.model.CityWeather;
 import com.alja.travelinfo.exceptionHandlers.InvalidWeatherCastRangeException;
-import com.alja.travelinfo.receivedPOJO.MajorCityDetails;
 import com.alja.travelinfo.model.TwoCitiesInfo;
 import com.alja.travelinfo.service.*;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@Slf4j
 @RestController
-@RequestMapping(path = "api")
+@RequestMapping(path = "api/v1")
 public class CityController {
 
     private final CityService cityService;
     private final WeatherService weatherService;
+    private final CityInformationService cityInformationService;
 
     @Autowired
-    public CityController(CityService cityService, WeatherService weatherService) {
+    public CityController(CityService cityService, WeatherService weatherService, CityInformationService cityInformationService) {
         this.cityService = cityService;
         this.weatherService = weatherService;
+        this.cityInformationService = cityInformationService;
     }
 
-    @GetMapping(path = "/v1/cities/{cityName}")
-    public String getCityDetails(@PathVariable("cityName") String cityName) {
-        return cityService.getCityDetails(cityName);
+    // == endpoint that returns basic city data as name, coordinates, country, borders and currency
+    //    about requested city (works with major world cities) ==
+    @GetMapping(path = "/info/{cityName}")
+    public CityInformation getCityInformation(@PathVariable("cityName") String cityName) {
+        return cityInformationService.getCityInformation(cityName);
     }
 
-    @GetMapping(path = "/v1/cities/{city1Name}/{city2Name}")
-    public String getAnyCitiesConnection(@PathVariable("city1Name") String city1Name,
-                                         @PathVariable("city2Name") String city2Name) {
-        return cityService.getTwoCitiesDetails(city1Name, city2Name);
+    // == endpoint that returns basic geographic info and current weather data
+    //    about requested city (works with major world cities) ==
+    @GetMapping(path = "/weather/{cityName}")
+    public CityWeather getCityWeather(@PathVariable("cityName") String cityName) {
+        return weatherService.cityWeather(cityName);
     }
 
+    // == endpoint that returns basic geographic info, current weather data and weather-cast
+    //    about requested city (works with major world cities) ==
+    @GetMapping(path = "/weather/{cityName}/{days}")
+    public CityWeather getCityWeather(@PathVariable("cityName") String cityName,
+                                      @PathVariable("days") int days) {
+        return weatherService.cityWeather(cityName, days);
+    }
 
-    @GetMapping(path = "/v2/cities/{city1Name}/{city2Name}")
+    // == endpoint that returns full names and coordinates of requested cities
+    //    as well as distance and average flight time between these cities ==
+    @GetMapping(path = "/cities/{city1Name}/{city2Name}")
     public TwoCitiesInfo getTwoCitiesInfo(@PathVariable("city1Name") String city1Name,
                                           @PathVariable("city2Name") String city2Name) {
         return cityService.getTravelInfo(city1Name, city2Name);
     }
 
-    @ExceptionHandler
-    public ResponseEntity<CityErrorResponse> handleException(CityNotFoundException e) {
-        CityErrorResponse error = new CityErrorResponse();
-        error.setStatus(HttpStatus.NOT_FOUND.value());
-        error.setMessage(e.getMessage());
-        error.setTimeStamp(System.currentTimeMillis());
-        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
-    }
-
-    @ExceptionHandler
-    public ResponseEntity<CityErrorResponse> handleException(SameCityException e) {
-        CityErrorResponse error = new CityErrorResponse();
-        error.setStatus(HttpStatus.METHOD_NOT_ALLOWED.value());
-        error.setMessage(e.getMessage());
-        error.setTimeStamp(System.currentTimeMillis());
-        return new ResponseEntity<>(error, HttpStatus.METHOD_NOT_ALLOWED);
-    }
-
-
-    @GetMapping(path = "/v3/weather/{cityName}")
-    public MajorCityDetails getMajorCityDetails(@PathVariable("cityName") String cityName) {
-        return weatherService.getCityDetails(cityName);
-    }
-
-
-    @GetMapping(path = "/v4/weather/{cityName}")
-    public CityWeather getCityWeather(@PathVariable("cityName") String cityName) {
-        return weatherService.cityWeather(cityName);
-    }
-
-    @GetMapping(path = "/v4/weather/{cityName}/{days}")
-    public CityWeather getCityWeatherCast(@PathVariable("cityName") String cityName,
-                                          @PathVariable("days") int days) {
-        return weatherService.cityWeatherCast(cityName, days);
-    }
-
+    // == throws exception when requested weather cast is out of range ==
     @ExceptionHandler
     public ResponseEntity<CityErrorResponse> handleException(InvalidWeatherCastRangeException e) {
         CityErrorResponse error = new CityErrorResponse();
@@ -91,5 +68,23 @@ public class CityController {
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
+    // == throws exception when requested city is not found ==
+    @ExceptionHandler
+    public ResponseEntity<CityErrorResponse> handleException(CityNotFoundException e) {
+        CityErrorResponse error = new CityErrorResponse();
+        error.setStatus(HttpStatus.NOT_FOUND.value());
+        error.setMessage(e.getMessage());
+        error.setTimeStamp(System.currentTimeMillis());
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
 
+    // == throws exception when two requested cities are the same ==
+    @ExceptionHandler
+    public ResponseEntity<CityErrorResponse> handleException(SameCityException e) {
+        CityErrorResponse error = new CityErrorResponse();
+        error.setStatus(HttpStatus.METHOD_NOT_ALLOWED.value());
+        error.setMessage(e.getMessage());
+        error.setTimeStamp(System.currentTimeMillis());
+        return new ResponseEntity<>(error, HttpStatus.METHOD_NOT_ALLOWED);
+    }
 }

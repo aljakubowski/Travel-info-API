@@ -12,15 +12,7 @@ public class CityInformation {
     private String coordinates;
 
     private String country;
+    private String[] countryBorders;
     private String currencySymbol;
-    private String[] borders;
-
-//    private String currentTime;
-//    private String sunRisAndSunSet;
-//    private String dayLength;
-
-
-
-
 
 }

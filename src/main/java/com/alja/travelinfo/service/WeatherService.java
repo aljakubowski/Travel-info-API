@@ -8,7 +8,6 @@ import com.alja.travelinfo.receivedPOJO.MajorCityDetails;
 import com.alja.travelinfo.receivedPOJO.MajorCityId;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -17,29 +16,34 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 
-// class that handles metaweather.com Service
 @Service
 @Slf4j
 public class WeatherService {
 
-    private String cityName;
-    private CityWeather cityWeather;
+    public String country;
 
-    @Autowired
-    public WeatherService(CityWeather cityWeather) {
-        this.cityWeather = cityWeather;
+    public WeatherService() {
     }
 
-    public CityWeather cityWeatherCast(String cityName, int days) {
+    // == method that returns city info and weather ==
+    public CityWeather cityWeather(String cityName) {
+        MajorCityDetails majorCityDetails = getCityDetails(cityName);
+        CityWeather cityWeather = new CityWeather();
+
+        return getCityInfoAndWeather(majorCityDetails, cityWeather);
+    }
+
+    // == method that returns city info, weather and weather-cast ==
+    public CityWeather cityWeather(String cityName, int days) {
+        MajorCityDetails majorCityDetails = getCityDetails(cityName);
+        CityWeather cityWeather = new CityWeather();
+
+        getCityInfoAndWeather(majorCityDetails, cityWeather);
 
         if (days < 1 || days > 5) {
             throw new InvalidWeatherCastRangeException("Invalid weather cast range: '" + days
-                    + "'. Available range: from 1 to 5 days");
+                    + "'. Available days range: from '1' to '5'");
         }
-
-        CityWeather cityWeather = cityWeather(cityName);
-        MajorCityDetails majorCityDetails = getCityDetails(cityName);
-
         ArrayList<ConsolidatedWeather> weatherCastInDays = new ArrayList<>();
         for (int i = 1; i <= days; i++) {
             weatherCastInDays.add(majorCityDetails.getConsolidated_weather()[i]);
@@ -49,10 +53,9 @@ public class WeatherService {
         return cityWeather;
     }
 
-    public CityWeather cityWeather(String cityName) {
-        MajorCityDetails majorCityDetails = getCityDetails(cityName);
+    // == method that sets fields of CityWeather class ==
+    private CityWeather getCityInfoAndWeather(MajorCityDetails majorCityDetails, CityWeather cityWeather) {
 
-        CityWeather cityWeather = new CityWeather();
         cityWeather.setCityName(majorCityDetails.getTitle());
         cityWeather.setDate(majorCityDetails.getTime().substring(0, 10));
         cityWeather.setTime(majorCityDetails.getTime().substring(11, 16));
@@ -65,10 +68,11 @@ public class WeatherService {
         cityWeather.setSunSet(sunSet);
         cityWeather.setDayLength(countDayLength(sunHours));
         cityWeather.setWeather(majorCityDetails.getConsolidated_weather()[0]);
-
         return cityWeather;
     }
 
+    // == method that counts day length based on raw Strings of Sun hours
+    //    and return clean String with day length info ==
     private String countDayLength(String[] hours) {
 
         int hourStart = Integer.parseInt(hours[0].substring(0, 2));
@@ -83,34 +87,17 @@ public class WeatherService {
         return hourDayLength + " hours, " + minDayLength + " minutes";
     }
 
-
-    public MajorCityDetails getCityDetails(String cityName) {
+    // == method that uses parameter to get woeid number and pass it to another request to
+    //    return full data about requested city and its weather ==
+    private MajorCityDetails getCityDetails(String cityName) {
         int woeid = getWoeidRequest(cityName);
-        MajorCityDetails city = getMajorCityDetailsRequest(woeid);
-
-        return city;
-    }
-
-    private MajorCityDetails getMajorCityDetailsRequest(int woeid) {
-        String apiAddress = "https://www.metaweather.com/api/location/";
-        HttpClient client = HttpClient.newHttpClient();
-
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create((apiAddress + woeid + "/"))).build();
-        String response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(HttpResponse::body)
-                .join();
-
-        MajorCityDetails majorCityDetails;
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            majorCityDetails = mapper.readValue(response, MajorCityDetails.class);
-        } catch (Exception e) {
-            throw new CityNotFoundException("City: '" + cityName + "' was not found");
-        }
-        log.info("=== > > > title is:" + majorCityDetails.getTitle());
+        MajorCityDetails majorCityDetails = getMajorCityDetailsRequest(woeid, cityName);
+        this.country = majorCityDetails.getParent().getTitle();
         return majorCityDetails;
     }
 
+    // == method that builds HTTP request to 'metaweather.com' API
+    //    and gets woeid as int response which is needed for further requests ==
     private int getWoeidRequest(String cityName) {
 
         String apiAddress = "https://www.metaweather.com/api/location/search/?query=";
@@ -123,6 +110,9 @@ public class WeatherService {
 
         response = response.substring(0, response.length() - 1).substring(1);
 
+        log.info("WeatherService => cityName request: " + request);
+        log.info("WeatherService <<== cityName response: " + response);
+
         MajorCityId majorCityId;
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -130,7 +120,30 @@ public class WeatherService {
         } catch (Exception e) {
             throw new CityNotFoundException("City: '" + cityName + "' was not found");
         }
-        this.cityName = majorCityId.getTitle();
         return majorCityId.getWoeid();
+    }
+
+    // == method that builds HTTP request to 'metaweather.com' API
+    //    and maps response to MajorCityDetails POJO ==
+    private MajorCityDetails getMajorCityDetailsRequest(int woeid, String cityName) {
+        String apiAddress = "https://www.metaweather.com/api/location/";
+        HttpClient client = HttpClient.newHttpClient();
+
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create((apiAddress + woeid + "/"))).build();
+        String response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(HttpResponse::body)
+                .join();
+
+        log.info("WeatherService => woeid request: " + request);
+        log.info("WeatherService <<== woeid response: " + response);
+
+        MajorCityDetails majorCityDetails;
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            majorCityDetails = mapper.readValue(response, MajorCityDetails.class);
+        } catch (Exception e) {
+            throw new CityNotFoundException("City: '" + cityName + "' was not found");
+        }
+        return majorCityDetails;
     }
 }

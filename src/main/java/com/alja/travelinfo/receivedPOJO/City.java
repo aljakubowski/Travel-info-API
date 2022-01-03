@@ -14,4 +14,8 @@ public class City {
     public City() {
     }
 
+    @Override
+    public boolean equals(Object o) {
+        return display_name.equals(((City) o).getDisplay_name());
+    }
 }
